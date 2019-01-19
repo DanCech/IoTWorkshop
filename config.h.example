@@ -1,0 +1,15 @@
+#define ID "mysensor"
+#define INTERVAL 10
+
+#define DHTPIN 32     // what digital pin we're connected to
+#define DHTTYPE DHT11   // DHT 11
+
+// WiFi
+#define WIFI_SSID     "<ssid>"
+#define WIFI_PASSWORD "<password>"
+
+// Hosted Metrics
+#define HM_HOST     "graphite-us-central1.grafana.net"
+#define HM_INSTANCE "<instance id>"
+#define HM_API_KEY  "<api key>"
+
