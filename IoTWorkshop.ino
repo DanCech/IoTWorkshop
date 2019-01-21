@@ -64,10 +64,10 @@ void setup() {
 
   // allow reuse (if server supports it)
   http.setReuse(true);
-  
+
   // Initialize a NTPClient to get time
   timeClient.begin();
-  
+
   dht.begin();
 }
 
@@ -85,7 +85,7 @@ void loop() {
   }
 
   yield();
-  
+
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
   float h = dht.readHumidity();
@@ -107,39 +107,33 @@ void loop() {
 
   unsigned long ts = timeClient.getEpochTime();
 
-  Serial.print(formatTime(ts));
-  Serial.print(F(" Humidity: "));
-  Serial.print(h);
-  Serial.print(F("%  Temperature: "));
-  Serial.print(t);
-  Serial.print(F("°C "));
-  Serial.print(f);
-  Serial.print(F("°F  Heat index: "));
-  Serial.print(hic);
-  Serial.print(F("°C "));
-  Serial.print(hif);
-  Serial.println(F("°F"));
+  Serial.println(
+    formatTime(ts) +
+    "  Humidity: " + h + "%" +
+    "  Temperature: " + t + "°C " + f + "°F" +
+    "  Heat index: " + hic + "°C " + hif + "°F"
+  );
 
   String body = String("[") +
-  "{\"name\":\"sensor." + ID + ".temp_c\",\"interval\":" + INTERVAL + ",\"value\":" + t + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-  "{\"name\":\"sensor." + ID + ".temp_f\",\"interval\":" + INTERVAL + ",\"value\":" + f + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-  "{\"name\":\"sensor." + ID + ".humidity\",\"interval\":" + INTERVAL + ",\"value\":" + h + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-  "{\"name\":\"sensor." + ID + ".heat_index_c\",\"interval\":" + INTERVAL + ",\"value\":" + hic + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-  "{\"name\":\"sensor." + ID + ".heat_index_f\",\"interval\":" + INTERVAL + ",\"value\":" + hif + ",\"mtype\":\"gauge\",\"time\":" + ts + "}]";
-  
+    "{\"name\":\"sensor." + ID + ".temp_c\",\"interval\":" + INTERVAL + ",\"value\":" + t + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".temp_f\",\"interval\":" + INTERVAL + ",\"value\":" + f + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".humidity\",\"interval\":" + INTERVAL + ",\"value\":" + h + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".heat_index_c\",\"interval\":" + INTERVAL + ",\"value\":" + hic + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".heat_index_f\",\"interval\":" + INTERVAL + ",\"value\":" + hif + ",\"mtype\":\"gauge\",\"time\":" + ts + "}]";
+
   http.begin(HM_HOST, 80, "/metrics");
   http.setAuthorization(HM_INSTANCE, HM_API_KEY);
   http.addHeader("Content-Type", "application/json");
 
   int httpCode = http.POST(body);
   if (httpCode > 0) {
-    Serial.printf("[HTTP] POST... code: %d Response: ", httpCode);
+    Serial.printf("[HTTP] POST...  Code: %d  Response: ", httpCode);
     http.writeToStream(&Serial);
     Serial.println();
   } else {
-    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    Serial.printf("[HTTP] POST... Error: %s\n", http.errorToString(httpCode).c_str());
   }
-  
+
   http.end();
 
   delay(30000);
