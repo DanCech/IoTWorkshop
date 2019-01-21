@@ -9,8 +9,6 @@
 
 #include "config.h"
 
-#define USE_SERIAL Serial
-
 HTTPClient http;
 
 WiFiUDP ntpUDP;
@@ -44,18 +42,23 @@ void setupWiFi() {
   randomSeed(micros());
 }
 
+String formatTime(unsigned long rawTime) {
+  unsigned long localTime = rawTime + (TZ_OFFSET * 3600);
+
+  unsigned long hours = (localTime % 86400L) / 3600;
+  String hoursStr = hours < 10 ? "0" + String(hours) : String(hours);
+
+  unsigned long minutes = (localTime % 3600) / 60;
+  String minuteStr = minutes < 10 ? "0" + String(minutes) : String(minutes);
+
+  unsigned long seconds = localTime % 60;
+  String secondStr = seconds < 10 ? "0" + String(seconds) : String(seconds);
+
+  return hoursStr + ":" + minuteStr + ":" + secondStr;
+}
+
 void setup() {
-  USE_SERIAL.begin(115200);
-
-  USE_SERIAL.println();
-  USE_SERIAL.println();
-  USE_SERIAL.println();
-
-  for(uint8_t t = 4; t > 0; t--) {
-    USE_SERIAL.printf("[SETUP] WAIT %d...\n", t);
-    USE_SERIAL.flush();
-    delay(1000);
-  }
+  Serial.begin(115200);
 
   setupWiFi();
 
@@ -69,6 +72,12 @@ void setup() {
 }
 
 void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.disconnect();
+    yield();
+    setupWiFi();
+  }
+
   // update time
   while(!timeClient.update()) {
     yield();
@@ -96,7 +105,10 @@ void loop() {
   // Compute heat index in Celsius (isFahreheit = false)
   float hic = dht.computeHeatIndex(t, h, false);
 
-  Serial.print(F("Humidity: "));
+  unsigned long ts = timeClient.getEpochTime();
+
+  Serial.print(formatTime(ts));
+  Serial.print(F(" Humidity: "));
   Serial.print(h);
   Serial.print(F("%  Temperature: "));
   Serial.print(t);
@@ -108,8 +120,6 @@ void loop() {
   Serial.print(hif);
   Serial.println(F("°F"));
 
-  unsigned long ts = timeClient.getEpochTime();
-  
   String body = String("[") +
   "{\"name\":\"sensor." + ID + ".temp_c\",\"interval\":" + INTERVAL + ",\"value\":" + t + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
   "{\"name\":\"sensor." + ID + ".temp_f\",\"interval\":" + INTERVAL + ",\"value\":" + f + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
@@ -122,17 +132,17 @@ void loop() {
   http.addHeader("Content-Type", "application/json");
 
   int httpCode = http.POST(body);
-  if(httpCode > 0) {
-    USE_SERIAL.printf("[HTTP] POST... code: %d\n", httpCode);
-    http.writeToStream(&USE_SERIAL);
-    USE_SERIAL.println();
+  if (httpCode > 0) {
+    Serial.printf("[HTTP] POST... code: %d Response: ", httpCode);
+    http.writeToStream(&Serial);
+    Serial.println();
   } else {
-    USE_SERIAL.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
   
   http.end();
 
-  delay(1000);
+  delay(30000);
 }
 
 
