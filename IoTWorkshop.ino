@@ -1,10 +1,7 @@
 #include <Arduino.h>
-
 #include <WiFi.h>
-
 #include <HTTPClient.h>
 #include <NTPClient.h>
-
 #include <DHT.h>
 
 #include "config.h"
@@ -16,12 +13,8 @@ NTPClient timeClient(ntpUDP);
 
 DHT dht(DHTPIN, DHTTYPE);
 
-///////////////////////////////////////////////////////////////////////////
-//   WiFi
-///////////////////////////////////////////////////////////////////////////
-
 /*
-   Function called to setup the connection to the WiFi AP
+  Function to setup the connection to the WiFi AP
 */
 void setupWiFi() {
   Serial.print("Connecting to ");
@@ -42,6 +35,9 @@ void setupWiFi() {
   randomSeed(micros());
 }
 
+/*
+  Function to format a unix timestamp as a human-readable time
+*/
 String formatTime(unsigned long rawTime) {
   unsigned long localTime = rawTime + (TZ_OFFSET * 3600);
 
@@ -57,6 +53,9 @@ String formatTime(unsigned long rawTime) {
   return hoursStr + ":" + minuteStr + ":" + secondStr;
 }
 
+/*
+  Function called at boot to initialize the system
+*/
 void setup() {
   Serial.begin(115200);
 
@@ -71,14 +70,18 @@ void setup() {
   dht.begin();
 }
 
+/*
+  Function called in a loop to read temp/humidity and submit them to hosted metrics
+*/
 void loop() {
+  // reconnect to WiFi if required
   if (WiFi.status() != WL_CONNECTED) {
     WiFi.disconnect();
     yield();
     setupWiFi();
   }
 
-  // update time
+  // update time via NTP if required
   while(!timeClient.update()) {
     yield();
     timeClient.forceUpdate();
@@ -107,6 +110,7 @@ void loop() {
 
   unsigned long ts = timeClient.getEpochTime();
 
+  // output readings on Serial connection
   Serial.println(
     formatTime(ts) +
     "  Humidity: " + h + "%" +
@@ -114,6 +118,7 @@ void loop() {
     "  Heat index: " + hic + "°C " + hif + "°F"
   );
 
+  // build hosted metrics json payload
   String body = String("[") +
     "{\"name\":\"sensor." + ID + ".temp_c\",\"interval\":" + INTERVAL + ",\"value\":" + t + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
     "{\"name\":\"sensor." + ID + ".temp_f\",\"interval\":" + INTERVAL + ",\"value\":" + f + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
@@ -121,6 +126,7 @@ void loop() {
     "{\"name\":\"sensor." + ID + ".heat_index_c\",\"interval\":" + INTERVAL + ",\"value\":" + hic + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
     "{\"name\":\"sensor." + ID + ".heat_index_f\",\"interval\":" + INTERVAL + ",\"value\":" + hif + ",\"mtype\":\"gauge\",\"time\":" + ts + "}]";
 
+  // submit POST request via HTTP
   http.begin(HM_HOST, 80, "/metrics");
   http.setAuthorization(HM_INSTANCE, HM_API_KEY);
   http.addHeader("Content-Type", "application/json");
@@ -136,8 +142,8 @@ void loop() {
 
   http.end();
 
-  delay(30000);
+  // wait 30s, then do it again
+  delay(30 * 1000);
 }
-
 
 
