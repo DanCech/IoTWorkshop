@@ -6,7 +6,13 @@
 
 #include "config.h"
 
-HTTPClient http;
+#ifdef HM_GRAPHITE_INSTANCE
+HTTPClient httpGraphite;
+#endif
+
+#ifdef HM_PROM_INSTANCE
+HTTPClient httpProm;
+#endif
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
@@ -14,7 +20,7 @@ NTPClient timeClient(ntpUDP);
 DHT dht(DHTPIN, DHTTYPE);
 
 /*
-  Function to setup the connection to the WiFi AP
+  Function to set up the connection to the WiFi AP
 */
 void setupWiFi() {
   Serial.print("Connecting to ");
@@ -53,20 +59,95 @@ String formatTime(unsigned long rawTime) {
   return hoursStr + ":" + minuteStr + ":" + secondStr;
 }
 
+#ifdef HM_GRAPHITE_INSTANCE
+/*
+ * Function to submit metrics to hosted Graphite
+ */
+void submitHostedGraphite(unsigned long ts, float c, float f, float h, float hic, float hif) {
+  // build hosted metrics json payload
+  String body = String("[") +
+    "{\"name\":\"sensor." + ID + ".temp_c\",\"interval\":" + INTERVAL + ",\"value\":" + c + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".temp_f\",\"interval\":" + INTERVAL + ",\"value\":" + f + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".humidity\",\"interval\":" + INTERVAL + ",\"value\":" + h + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".heat_index_c\",\"interval\":" + INTERVAL + ",\"value\":" + hic + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
+    "{\"name\":\"sensor." + ID + ".heat_index_f\",\"interval\":" + INTERVAL + ",\"value\":" + hif + ",\"mtype\":\"gauge\",\"time\":" + ts + "}]";
+
+  // Serial.println(body);
+
+  // submit POST request via HTTP
+  httpGraphite.begin(HM_GRAPHITE_HOST, 80, "/metrics");
+  httpGraphite.setAuthorization(HM_GRAPHITE_INSTANCE, HM_API_KEY);
+  httpGraphite.addHeader("Content-Type", "application/json");
+
+  int httpCode = httpGraphite.POST(body);
+  if (httpCode > 0) {
+    Serial.printf("[HTTP] POST...  Code: %d  Response: ", httpCode);
+    httpGraphite.writeToStream(&Serial);
+    Serial.println();
+  } else {
+    Serial.printf("[HTTP] POST... Error: %s\n", httpGraphite.errorToString(httpCode).c_str());
+  }
+
+  httpGraphite.end();
+}
+#endif
+
+#ifdef HM_PROM_INSTANCE
+/*
+ * Function to submit metrics to hosted Prometheus
+ */
+void submitHostedPrometheus(unsigned long ts, float c, float f, float h, float hic, float hif) {
+  String body = String("[") +
+    "{\"metric\":\"temp_c\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + c + ",\"timestamp\":" + ts + "}," +
+    "{\"metric\":\"temp_f\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + f + ",\"timestamp\":" + ts + "}," +
+    "{\"metric\":\"humidity\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + h + ",\"timestamp\":" + ts + "}," +
+    "{\"metric\":\"heat_index_c\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + hic + ",\"timestamp\":" + ts + "}," +
+    "{\"metric\":\"heat_index_f\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + hif + ",\"timestamp\":" + ts + "}]";
+
+  // Serial.println(body);
+
+  // submit POST request via HTTP
+  httpProm.begin(HM_PROM_HOST, 80, "/opentsdb/api/put");
+  httpProm.setAuthorization(HM_PROM_INSTANCE, HM_API_KEY);
+  httpProm.addHeader("Content-Type", "application/json");
+
+  int httpCode = httpProm.POST(body);
+  if (httpCode > 0) {
+    Serial.printf("[HTTP] POST...  Code: %d  Response: ", httpCode);
+    httpProm.writeToStream(&Serial);
+    Serial.println();
+  } else {
+    Serial.printf("[HTTP] POST... Error: %s\n", httpProm.errorToString(httpCode).c_str());
+  }
+
+  httpProm.end();
+}
+#endif
+
 /*
   Function called at boot to initialize the system
 */
 void setup() {
+  // start the serial output at 115,200 baud
   Serial.begin(115200);
 
+  // connect to WiFi
   setupWiFi();
 
-  // allow reuse (if server supports it)
-  http.setReuse(true);
+#ifdef HM_GRAPHITE_INSTANCE
+  // allow http connection reuse (if server supports it)
+  httpGraphite.setReuse(true);
+#endif
+
+#ifdef HM_PROM_INSTANCE
+  // allow http connection reuse (if server supports it)
+  httpProm.setReuse(true);
+#endif
 
   // Initialize a NTPClient to get time
   timeClient.begin();
 
+  // start the DHT sensor
   dht.begin();
 }
 
@@ -91,14 +172,17 @@ void loop() {
 
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+
+  // Read humidity
   float h = dht.readHumidity();
+
   // Read temperature as Celsius (the default)
-  float t = dht.readTemperature();
+  float c = dht.readTemperature();
   // Read temperature as Fahrenheit (isFahrenheit = true)
   float f = dht.readTemperature(true);
 
   // Check if any reads failed and exit early (to try again).
-  if (isnan(h) || isnan(t) || isnan(f)) {
+  if (isnan(h) || isnan(c) || isnan(f)) {
     Serial.println(F("Failed to read from DHT sensor!"));
     return;
   }
@@ -106,44 +190,27 @@ void loop() {
   // Compute heat index in Fahrenheit (the default)
   float hif = dht.computeHeatIndex(f, h);
   // Compute heat index in Celsius (isFahreheit = false)
-  float hic = dht.computeHeatIndex(t, h, false);
+  float hic = dht.computeHeatIndex(c, h, false);
 
+  // get current timestamp
   unsigned long ts = timeClient.getEpochTime();
 
   // output readings on Serial connection
   Serial.println(
     formatTime(ts) +
     "  Humidity: " + h + "%" +
-    "  Temperature: " + t + "°C " + f + "°F" +
+    "  Temperature: " + c + "°C " + f + "°F" +
     "  Heat index: " + hic + "°C " + hif + "°F"
   );
 
-  // build hosted metrics json payload
-  String body = String("[") +
-    "{\"name\":\"sensor." + ID + ".temp_c\",\"interval\":" + INTERVAL + ",\"value\":" + t + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-    "{\"name\":\"sensor." + ID + ".temp_f\",\"interval\":" + INTERVAL + ",\"value\":" + f + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-    "{\"name\":\"sensor." + ID + ".humidity\",\"interval\":" + INTERVAL + ",\"value\":" + h + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-    "{\"name\":\"sensor." + ID + ".heat_index_c\",\"interval\":" + INTERVAL + ",\"value\":" + hic + ",\"mtype\":\"gauge\",\"time\":" + ts + "}," +
-    "{\"name\":\"sensor." + ID + ".heat_index_f\",\"interval\":" + INTERVAL + ",\"value\":" + hif + ",\"mtype\":\"gauge\",\"time\":" + ts + "}]";
+#ifdef HM_GRAPHITE_INSTANCE
+  submitHostedGraphite(ts, c, f, h, hic, hif);
+#endif
 
-  // submit POST request via HTTP
-  http.begin(HM_HOST, 80, "/metrics");
-  http.setAuthorization(HM_INSTANCE, HM_API_KEY);
-  http.addHeader("Content-Type", "application/json");
-
-  int httpCode = http.POST(body);
-  if (httpCode > 0) {
-    Serial.printf("[HTTP] POST...  Code: %d  Response: ", httpCode);
-    http.writeToStream(&Serial);
-    Serial.println();
-  } else {
-    Serial.printf("[HTTP] POST... Error: %s\n", http.errorToString(httpCode).c_str());
-  }
-
-  http.end();
+#ifdef HM_PROM_INSTANCE
+  submitHostedPrometheus(ts, c, f, h, hic, hif);
+#endif
 
   // wait 30s, then do it again
   delay(30 * 1000);
 }
-
-
