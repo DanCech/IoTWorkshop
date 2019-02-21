@@ -1,23 +1,27 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
 #include <NTPClient.h>
 #include <DHT.h>
+#include <HTTPClient.h>
 
 #include "config.h"
 
+// NTP Client
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+
+// DHT Sensor
+DHT dht(DHTPIN, DHTTYPE);
+
+// Hosted Metrics Graphite Client
 #ifdef HM_GRAPHITE_INSTANCE
 HTTPClient httpGraphite;
 #endif
 
+// Hosted Metrics Prometheus Client
 #ifdef HM_PROM_INSTANCE
 HTTPClient httpProm;
 #endif
-
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
-
-DHT dht(DHTPIN, DHTTYPE);
 
 /*
   Function to set up the connection to the WiFi AP
@@ -75,17 +79,17 @@ void submitHostedGraphite(unsigned long ts, float c, float f, float h, float hic
   // Serial.println(body);
 
   // submit POST request via HTTP
-  httpGraphite.begin(HM_GRAPHITE_HOST, 80, "/metrics");
+  httpGraphite.begin(String("https://") + HM_GRAPHITE_HOST + "/metrics", HM_ROOT_CA);
   httpGraphite.setAuthorization(HM_GRAPHITE_INSTANCE, HM_API_KEY);
   httpGraphite.addHeader("Content-Type", "application/json");
 
   int httpCode = httpGraphite.POST(body);
   if (httpCode > 0) {
-    Serial.printf("[HTTP] POST...  Code: %d  Response: ", httpCode);
+    Serial.printf("[HTTPS] POST...  Code: %d  Response: ", httpCode);
     httpGraphite.writeToStream(&Serial);
     Serial.println();
   } else {
-    Serial.printf("[HTTP] POST... Error: %s\n", httpGraphite.errorToString(httpCode).c_str());
+    Serial.printf("[HTTPS] POST... Error: %s\n", httpGraphite.errorToString(httpCode).c_str());
   }
 
   httpGraphite.end();
@@ -107,17 +111,17 @@ void submitHostedPrometheus(unsigned long ts, float c, float f, float h, float h
   // Serial.println(body);
 
   // submit POST request via HTTP
-  httpProm.begin(HM_PROM_HOST, 80, "/opentsdb/api/put");
+  httpProm.begin(String("https://") + HM_PROM_HOST + "/opentsdb/api/put", HM_ROOT_CA);
   httpProm.setAuthorization(HM_PROM_INSTANCE, HM_API_KEY);
   httpProm.addHeader("Content-Type", "application/json");
 
   int httpCode = httpProm.POST(body);
   if (httpCode > 0) {
-    Serial.printf("[HTTP] POST...  Code: %d  Response: ", httpCode);
+    Serial.printf("[HTTPS] POST...  Code: %d  Response: ", httpCode);
     httpProm.writeToStream(&Serial);
     Serial.println();
   } else {
-    Serial.printf("[HTTP] POST... Error: %s\n", httpProm.errorToString(httpCode).c_str());
+    Serial.printf("[HTTPS] POST... Error: %s\n", httpProm.errorToString(httpCode).c_str());
   }
 
   httpProm.end();
