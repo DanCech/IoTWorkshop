@@ -16,9 +16,6 @@ DHT dht(DHTPIN, DHTTYPE);
 // Hosted Metrics Graphite Client
 HTTPClient httpGraphite;
 
-// Hosted Metrics Prometheus Client
-HTTPClient httpProm;
-
 // Carbon UDP Client
 WiFiUDP carbonUdp;
 
@@ -94,35 +91,8 @@ void submitHostedGraphite(unsigned long ts, float c, float f, float h, float hic
 }
 
 /*
- * Function to submit metrics to hosted Prometheus
+ * Function to submit metrics via carbon protocol
  */
-void submitHostedPrometheus(unsigned long ts, float c, float f, float h, float hic, float hif) {
-  String body = String("[") +
-    "{\"metric\":\"temp_c\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + c + ",\"timestamp\":" + ts + "}," +
-    "{\"metric\":\"temp_f\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + f + ",\"timestamp\":" + ts + "}," +
-    "{\"metric\":\"humidity\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + h + ",\"timestamp\":" + ts + "}," +
-    "{\"metric\":\"heat_index_c\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + hic + ",\"timestamp\":" + ts + "}," +
-    "{\"metric\":\"heat_index_f\",\"tags\":{\"sensor\":\"" + ID + "\"},\"value\":" + hif + ",\"timestamp\":" + ts + "}]";
-
-  // Serial.println(body);
-
-  // submit POST request via HTTP
-  httpProm.begin(String("https://") + HM_PROM_HOST + "/opentsdb/api/put", HM_ROOT_CA);
-  httpProm.setAuthorization(HM_PROM_INSTANCE, HM_API_KEY);
-  httpProm.addHeader("Content-Type", "application/json");
-
-  int httpCode = httpProm.POST(body);
-  if (httpCode > 0) {
-    Serial.printf("Prom [HTTPS] POST...  Code: %d  Response: ", httpCode);
-    httpProm.writeToStream(&Serial);
-    Serial.println();
-  } else {
-    Serial.printf("Prom [HTTPS] POST... Error: %s\n", httpProm.errorToString(httpCode).c_str());
-  }
-
-  httpProm.end();
-}
-
 void submitCarbon(unsigned long ts, float c, float f, float h, float hic, float hif) {
   // build hosted metrics json payload
   String body = String("sensor.") + ID + ".temp_c " + c + " " + ts + "\n" +
@@ -213,11 +183,6 @@ void loop() {
   if (HM_GRAPHITE_INSTANCE != "<instance id>") {
     yield();
     submitHostedGraphite(ts, c, f, h, hic, hif);
-  }
-
-  if (HM_PROM_INSTANCE != "<instance id>") {
-    yield();
-    submitHostedPrometheus(ts, c, f, h, hic, hif);
   }
 
   submitCarbon(ts, c, f, h, hic, hif);
