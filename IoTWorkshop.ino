@@ -8,28 +8,24 @@
 
 // NTP Client
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
+NTPClient ntpClient(ntpUDP);
 
 // DHT Sensor
 DHT dht(DHTPIN, DHTTYPE);
 
 // Hosted Metrics Graphite Client
-#ifdef HM_GRAPHITE_INSTANCE
 HTTPClient httpGraphite;
-#endif
 
 // Hosted Metrics Prometheus Client
-#ifdef HM_PROM_INSTANCE
 HTTPClient httpProm;
-#endif
 
 /*
   Function to set up the connection to the WiFi AP
 */
 void setupWiFi() {
-  Serial.print("Connecting to ");
+  Serial.print("Connecting to '");
   Serial.print(WIFI_SSID);
-  Serial.print("...");
+  Serial.print("' ...");
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
@@ -63,7 +59,6 @@ String formatTime(unsigned long rawTime) {
   return hoursStr + ":" + minuteStr + ":" + secondStr;
 }
 
-#ifdef HM_GRAPHITE_INSTANCE
 /*
  * Function to submit metrics to hosted Graphite
  */
@@ -85,18 +80,16 @@ void submitHostedGraphite(unsigned long ts, float c, float f, float h, float hic
 
   int httpCode = httpGraphite.POST(body);
   if (httpCode > 0) {
-    Serial.printf("[HTTPS] POST...  Code: %d  Response: ", httpCode);
+    Serial.printf("Graphite [HTTPS] POST...  Code: %d  Response: ", httpCode);
     httpGraphite.writeToStream(&Serial);
     Serial.println();
   } else {
-    Serial.printf("[HTTPS] POST... Error: %s\n", httpGraphite.errorToString(httpCode).c_str());
+    Serial.printf("Graphite [HTTPS] POST... Error: %s\n", httpGraphite.errorToString(httpCode).c_str());
   }
 
   httpGraphite.end();
 }
-#endif
 
-#ifdef HM_PROM_INSTANCE
 /*
  * Function to submit metrics to hosted Prometheus
  */
@@ -117,16 +110,15 @@ void submitHostedPrometheus(unsigned long ts, float c, float f, float h, float h
 
   int httpCode = httpProm.POST(body);
   if (httpCode > 0) {
-    Serial.printf("[HTTPS] POST...  Code: %d  Response: ", httpCode);
+    Serial.printf("Prom [HTTPS] POST...  Code: %d  Response: ", httpCode);
     httpProm.writeToStream(&Serial);
     Serial.println();
   } else {
-    Serial.printf("[HTTPS] POST... Error: %s\n", httpProm.errorToString(httpCode).c_str());
+    Serial.printf("Prom [HTTPS] POST... Error: %s\n", httpProm.errorToString(httpCode).c_str());
   }
 
   httpProm.end();
 }
-#endif
 
 /*
   Function called at boot to initialize the system
@@ -138,18 +130,8 @@ void setup() {
   // connect to WiFi
   setupWiFi();
 
-#ifdef HM_GRAPHITE_INSTANCE
-  // allow http connection reuse (if server supports it)
-  httpGraphite.setReuse(true);
-#endif
-
-#ifdef HM_PROM_INSTANCE
-  // allow http connection reuse (if server supports it)
-  httpProm.setReuse(true);
-#endif
-
   // Initialize a NTPClient to get time
-  timeClient.begin();
+  ntpClient.begin();
 
   // start the DHT sensor
   dht.begin();
@@ -167,23 +149,28 @@ void loop() {
   }
 
   // update time via NTP if required
-  while(!timeClient.update()) {
+  while(!ntpClient.update()) {
     yield();
-    timeClient.forceUpdate();
+    ntpClient.forceUpdate();
   }
 
-  yield();
+  // get current timestamp
+  unsigned long ts = ntpClient.getEpochTime();
 
   // Reading temperature or humidity takes about 250 milliseconds!
   // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
 
   // Read humidity
   float h = dht.readHumidity();
+  yield();
 
   // Read temperature as Celsius (the default)
   float c = dht.readTemperature();
+  yield();
+
   // Read temperature as Fahrenheit (isFahrenheit = true)
   float f = dht.readTemperature(true);
+  yield();
 
   // Check if any reads failed and exit early (to try again).
   if (isnan(h) || isnan(c) || isnan(f)) {
@@ -196,9 +183,6 @@ void loop() {
   // Compute heat index in Celsius (isFahreheit = false)
   float hic = dht.computeHeatIndex(c, h, false);
 
-  // get current timestamp
-  unsigned long ts = timeClient.getEpochTime();
-
   // output readings on Serial connection
   Serial.println(
     formatTime(ts) +
@@ -207,13 +191,15 @@ void loop() {
     "  Heat index: " + hic + "°C " + hif + "°F"
   );
 
-#ifdef HM_GRAPHITE_INSTANCE
-  submitHostedGraphite(ts, c, f, h, hic, hif);
-#endif
+  if (HM_GRAPHITE_INSTANCE != "<instance id>") {
+    yield();
+    submitHostedGraphite(ts, c, f, h, hic, hif);
+  }
 
-#ifdef HM_PROM_INSTANCE
-  submitHostedPrometheus(ts, c, f, h, hic, hif);
-#endif
+  if (HM_PROM_INSTANCE != "<instance id>") {
+    yield();
+    submitHostedPrometheus(ts, c, f, h, hic, hif);
+  }
 
   // wait 30s, then do it again
   delay(30 * 1000);

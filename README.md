@@ -33,6 +33,8 @@ This project is a demonstration of how to monitor temperature and humidity using
 - Set a unique name for this sensor
 - Adjust reporting interval if required
 
+How to get the root CA cert: https://techtutorialsx.com/2017/11/18/esp32-arduino-https-get-request/
+
 ### Hosted Metrics
 
 - Sign up at https://grafana.com/loki#get
