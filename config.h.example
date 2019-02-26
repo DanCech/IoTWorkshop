@@ -1,8 +1,8 @@
 // WiFi
-#define WIFI_SSID     "<ssid>"
-#define WIFI_PASSWORD "<password>"
+#define WIFI_SSID     "iotworkshop"
+#define WIFI_PASSWORD "iotworkshop"
 
-#define TZ_OFFSET -5
+#define TZ_OFFSET -8
 
 #define ID "<sensor name>" // unique name for this sensor
 #define INTERVAL 60
