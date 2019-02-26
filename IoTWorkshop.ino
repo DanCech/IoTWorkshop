@@ -27,6 +27,7 @@ void setupWiFi() {
   Serial.print(WIFI_SSID);
   Serial.print("' ...");
 
+  WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -34,7 +35,6 @@ void setupWiFi() {
   }
   Serial.println("connected");
 
-  // Print local IP address
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
