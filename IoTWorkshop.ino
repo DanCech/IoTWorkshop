@@ -19,6 +19,9 @@ HTTPClient httpGraphite;
 // Hosted Metrics Prometheus Client
 HTTPClient httpProm;
 
+// Carbon UDP Client
+WiFiUDP carbonUdp;
+
 /*
   Function to set up the connection to the WiFi AP
 */
@@ -120,6 +123,22 @@ void submitHostedPrometheus(unsigned long ts, float c, float f, float h, float h
   httpProm.end();
 }
 
+void submitCarbon(unsigned long ts, float c, float f, float h, float hic, float hif) {
+  // build hosted metrics json payload
+  String body = String("sensor.") + ID + ".temp_c " + c + " " + ts + "\n" +
+    "sensor." + ID + ".temp_f " + f + " " + ts + "\n" +
+    "sensor." + ID + ".humidity " + h + " " + ts + "\n" +
+    "sensor." + ID + ".heat_index_c " + hic + " " + ts + "\n" +
+    "sensor." + ID + ".heat_index_f " + hif + " " + ts + "\n";
+
+  Serial.println("Sending to carbon");
+  // Serial.println(body);
+
+  carbonUdp.beginPacket(CARBON_HOST, CARBON_PORT);
+  carbonUdp.print(body);
+  carbonUdp.endPacket();
+}
+
 /*
   Function called at boot to initialize the system
 */
@@ -200,6 +219,8 @@ void loop() {
     yield();
     submitHostedPrometheus(ts, c, f, h, hic, hif);
   }
+
+  submitCarbon(ts, c, f, h, hic, hif);
 
   // wait 30s, then do it again
   delay(30 * 1000);

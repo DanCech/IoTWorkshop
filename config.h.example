@@ -19,6 +19,9 @@
 #define HM_PROM_HOST     "prometheus-us-central1.grafana.net"
 #define HM_PROM_INSTANCE "<instance id>"
 
+#define CARBON_HOST "192.168.1.120"
+#define CARBON_PORT 2003
+
 #define HM_ROOT_CA "-----BEGIN CERTIFICATE-----" \
 "MIIF2DCCA8CgAwIBAgIQTKr5yttjb+Af907YWwOGnTANBgkqhkiG9w0BAQwFADCB" \
 "hTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdyZWF0ZXIgTWFuY2hlc3RlcjEQMA4G" \
